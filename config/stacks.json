@@ -1,0 +1,26 @@
+{
+  "node": {
+    "base": "node:20-alpine",
+    "ports": [3000],
+    "dependency_files": ["package.json", "package-lock.json"],
+    "install_cmd": "npm install --production",
+    "start_cmd": "node index.js",
+    "optional_blocks": {
+      "multi_stage": false,
+      "security": true,
+      "healthcheck": false
+    }
+  },
+  "go": {
+    "base": "golang:1.22-alpine",
+    "ports": [8080],
+    "dependency_files": ["go.mod", "go.sum"],
+    "install_cmd": "go mod download",
+    "start_cmd": "./app",
+    "optional_blocks": {
+      "multi_stage": true,
+      "security": true,
+      "healthcheck": true
+    }
+  }
+}

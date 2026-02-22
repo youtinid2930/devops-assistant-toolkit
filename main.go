@@ -1,57 +1,46 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"strings"
+	"devops-assistant-toolkit/internal/docker"
 )
 
 func main() {
-	// Check command line arguments
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run main.go <project_name>")
+	// Load stacks.json
+	stacks, err := loadStacksConfig("config/stacks.json")
+	if err != nil {
+		fmt.Println("Error loading stacks:", err)
 		return
 	}
 
-	projectName := os.Args[1]
+	gen := docker.NewGenerator(stacks, "templates/Dockerfile.tpl", "Dockerfile")
 
-	// Create project folder
-	err := os.Mkdir(projectName, 0755)
-	if err != nil && !os.IsExist(err) {
-		fmt.Println("Error creating project folder:", err)
+	if err := gen.SelectStack(); err != nil {
+		fmt.Println("Error selecting stack:", err)
 		return
 	}
 
-	// List template to copy
-	templates := []string{"Dockerfile", "docker-compose.yml"}
-
-
-	for _, tpl := range templates {
-		copyTemplate("templates/"+tpl, projectName+"/"+tpl, projectName)
+	if err := gen.Generate(); err != nil {
+		fmt.Println("Error generating Dockerfile:", err)
+		return
 	}
 
-	fmt.Println("Project", projectName, "initialized successfuly!")
+	fmt.Println("Dockerfile generated successfully!")
 }
 
-
-// copyTemplate reads a template file, replaces placeholder, and write to destination
-func copyTemplate (srcpath, destPath, projectName string) {
-	data, err := ioutil.ReadFile(srcpath)
-
+// loadStacksConfig loads JSON stack configuration
+func loadStacksConfig(path string) (map[string]map[string]interface{}, error) {
+	file, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Println("Error reading template:", err)
-		return
+		return nil, err
 	}
 
-	content := strings.ReplaceAll(string(data), "{{PROJECT_NAME}}", projectName)
-
-	err = ioutil.WriteFile(destPath, []byte(content), 0644)
-
-	if err != nil {
-		fmt.Println("Error writing file:", err)
-		return
+	var stacks map[string]map[string]interface{}
+	if err := json.Unmarshal(file, &stacks); err != nil {
+		return nil, err
 	}
 
-	fmt.Println("Created:", destPath)
+	return stacks, nil
 }
