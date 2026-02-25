@@ -1,26 +1,47 @@
 {
   "node": {
-    "base": "node:20-alpine",
-    "ports": [3000],
+    "base_image": "node:20-alpine",
     "dependency_files": ["package.json", "package-lock.json"],
     "install_cmd": "npm install --production",
     "start_cmd": "node index.js",
-    "optional_blocks": {
-      "multi_stage": false,
-      "security": true,
-      "healthcheck": false
-    }
+    "ports": [3000],
+    "templates": ["production.tpl", "standalone.tpl"],
+    "optional_blocks": ["multi_stage", "security", "healthcheck"]
   },
   "go": {
-    "base": "golang:1.22-alpine",
-    "ports": [8080],
+    "base_image": "golang:1.21-alpine",
     "dependency_files": ["go.mod", "go.sum"],
     "install_cmd": "go mod download",
     "start_cmd": "./app",
-    "optional_blocks": {
-      "multi_stage": true,
-      "security": true,
-      "healthcheck": true
-    }
+    "ports": [8080],
+    "templates": ["production.tpl", "standalone.tpl"],
+    "optional_blocks": ["multi_stage", "security", "healthcheck"]
+  },
+  "laravel": {
+    "base_image": "php:8.2-fpm",
+    "dependency_files": ["composer.json", "composer.lock"],
+    "install_cmd": "composer install --no-dev --optimize-autoloader",
+    "start_cmd": "php artisan serve --host=0.0.0.0 --port=8000",
+    "ports": [8000],
+    "templates": ["production.tpl", "standalone.tpl"],
+    "optional_blocks": ["multi_stage", "security", "healthcheck"]
+  },
+  "nextjs": {
+    "base_image": "node:20-alpine",
+    "dependency_files": ["package.json", "package-lock.json"],
+    "install_cmd": "npm install --production",
+    "start_cmd": "npm start",
+    "ports": [3000],
+    "templates": ["production.tpl", "standalone.tpl"],
+    "optional_blocks": ["multi_stage", "security", "healthcheck"]
+  },
+  "springboot": {
+    "base_image": "openjdk:20-jdk-alpine",
+    "dependency_files": ["pom.xml"],
+    "install_cmd": "mvn clean install -DskipTests",
+    "start_cmd": "java -jar app.jar",
+    "ports": [8080],
+    "templates": ["production.tpl", "standalone.tpl"],
+    "optional_blocks": ["multi_stage", "security", "healthcheck"]
   }
 }

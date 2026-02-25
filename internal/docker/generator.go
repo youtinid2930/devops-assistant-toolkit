@@ -1,89 +1,71 @@
 package docker
 
 import (
+	"bytes"
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 	"text/template"
 )
 
-// DockerfileGenerator handles generating Dockerfiles from templates
-type DockerfileGenerator struct {
-	Stacks    map[string]map[string]interface{}
-	Config    DockerConfig
-	Template  string
-	Output    string
-	StackName string
-}
-
-// NewGenerator creates a new generator instance
-func NewGenerator(stacks map[string]map[string]interface{}, templatePath, outputPath string) *DockerfileGenerator {
-	return &DockerfileGenerator{
-		Stacks:   stacks,
-		Template: templatePath,
-		Output:   outputPath,
+// TemplateData combines stack config + optional blocks
+type TemplateData struct {
+	BaseImage       string
+	DependencyFiles []string
+	InstallCmd      string
+	StartCmd        string
+	Ports           []int
+	Optional        struct {
+		MultiStage  bool
+		Security    bool
+		Healthcheck bool
 	}
 }
 
-// SelectStack prompts the user to select a stack and sets the Config
-func (g *DockerfileGenerator) SelectStack() error {
-	// List stacks
-	println("Available stacks:")
-	for s := range g.Stacks {
-		println("-", s)
+// GenerateDockerfile renders a Dockerfile using a template and optional blocks
+func GenerateDockerfile(stackName string, cfg StackConfig, templateName string, optionalBlocks []string) error {
+	// Prepare template data
+	data := TemplateData{
+		BaseImage:       cfg.BaseImage,
+		DependencyFiles: cfg.DependencyFiles,
+		InstallCmd:      cfg.InstallCmd,
+		StartCmd:        cfg.StartCmd,
+		Ports:           cfg.Ports,
 	}
 
-	stack := Prompt("Choose stack (default: node)", "node")
-	stackCfg, ok := g.Stacks[stack]
-	if !ok {
-		return os.ErrNotExist
-	}
-	g.StackName = stack
-
-	// Auto-detect dependency files
-	depFiles := AutoDetectDeps(stackCfg)
-	if len(depFiles) == 0 {
-		// fallback: use all listed files
-		for _, f := range stackCfg["dependency_files"].([]interface{}) {
-			depFiles = append(depFiles, f.(string))
+	for _, block := range optionalBlocks {
+		switch block {
+		case "multi_stage":
+			data.Optional.MultiStage = true
+		case "security":
+			data.Optional.Security = true
+		case "healthcheck":
+			data.Optional.Healthcheck = true
 		}
 	}
 
-	// Optional blocks
-	security := Prompt("Include security best practices? [Y/n]", "Y") == "Y"
-	multiStage := Prompt("Include multi-stage build? [Y/n]", "N") == "Y"
-	healthcheck := Prompt("Include healthcheck? [Y/n]", "N") == "Y"
+	// Load template file for the selected stack
+	templatePath := filepath.Join("templates", stackName, templateName)
+	tplBytes, err := os.ReadFile(templatePath)
+	if err != nil {
+		return fmt.Errorf("failed to load template %q: %w", templatePath, err)
+	}
 
-	// Set config
-	g.Config = DockerConfig{
-		BaseImage:       stackCfg["base"].(string),
-		DependencyFiles: strings.Join(depFiles, " "),
-		InstallCmd:      stackCfg["install_cmd"].(string),
-		StartCmd:        stackCfg["start_cmd"].(string),
-		Port:            strings.TrimSpace(strings.Split(fmt.Sprintf("%v", stackCfg["ports"].([]interface{})[0]), " ")[0]),
-		Blocks: OptionalBlocks{
-			Security:    security,
-			MultiStage:  multiStage,
-			HealthCheck: healthcheck,
-		},
-		StackName: stack,
+	tpl, err := template.New(templateName).Parse(string(tplBytes))
+	if err != nil {
+		return fmt.Errorf("failed to parse template %q: %w", templatePath, err)
+	}
+
+	// Render template
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("failed to execute template %q: %w", templatePath, err)
+	}
+
+	// Write the generated Dockerfile
+	if err := os.WriteFile("Dockerfile", buf.Bytes(), 0644); err != nil {
+		return fmt.Errorf("failed to write Dockerfile: %w", err)
 	}
 
 	return nil
-}
-
-// Generate creates the Dockerfile from template
-func (g *DockerfileGenerator) Generate() error {
-	tpl, err := template.ParseFiles(g.Template)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.Create(g.Output)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	return tpl.Execute(f, g.Config)
 }
